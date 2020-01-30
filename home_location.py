@@ -5,8 +5,11 @@ import pandas as pd
 import geopandas as gpd
 from shapely.geometry import Point, Polygon, shape
 import matplotlib.pyplot as plt
-barrios = gpd.read_file("../data/barrios_badata.shp")
-Provincia = gpd.read_file("../data/Provincia_2010.shp")
+
+import os,sys,inspect
+currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
+barrios = gpd.read_file(currentdir+"/data/barrios_badata.shp")
+Provincia = gpd.read_file(currentdir+"/data/Provincia_2010.shp")
 
 
 crs_ciudad={'proj': 'tmerc',
