@@ -1,4 +1,4 @@
-__author__ = 'Richard'
+__author__ = 'Ricardo Pasquini'
 
 import pandas as pd
 import communicationwmongo as commu

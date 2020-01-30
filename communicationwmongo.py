@@ -1,4 +1,4 @@
-__author__ = 'Richard'
+__author__ = 'Ricardo Pasquini'
 
 from pymongo import MongoClient
 import numpy as np

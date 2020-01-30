@@ -1,4 +1,4 @@
-__author__ = 'Richard'
+__author__ = 'Ricardo Pasquini'
 
 #individual dataframe
 import pandas as pd
@@ -23,8 +23,7 @@ crs_ciudad={'proj': 'tmerc',
 
 def df_to_gdf(input_df, crs=4326):
     """
-    Convert a DataFrame with longitude and latitude columns
-    to a GeoDataFrame.
+    Convert a DataFrame with lon  and lat as columns to GeoDataFrame.
     """
     df = input_df.copy()
 
@@ -95,6 +94,10 @@ def findhome(db,uid, map=True):
 
     dfi=pd.DataFrame(list(db.tweets.find({'u_id':uid})))
 
+    #in the new data it is necessary to unfold the json containing coordinates into columns
+    dfi = pd.concat([dfi, dfi.location.apply(lambda x: x['coordinates'][0]).rename('lon'),
+                     dfi.location.apply(lambda x: x['coordinates'][1]).rename('lat')], axis=1)
+
     if dfi.shape[0]>30:
         dfi['hour']=pd.to_datetime(dfi['created_at'] // 1000, unit='s').dt.hour
         #nighttime dummy
@@ -110,6 +113,7 @@ def findhome(db,uid, map=True):
         # this is a critical step, which imposes that coordinates precision in degress will be up to the second decimal (equivalent to 110 meters in CABA proyection)
         dfi=dfi.round({'lat': 2, 'lon': 2})
 
+        #freqdfi is dataframe at the location level aimed to counts tweets by location.
         freqdfi=dfi.groupby(["lat", "lon"]).size().reset_index(name="freq").sort_values(by=['freq'], ascending=False)
 
         rangedfi=pd.concat([dfi.groupby(["lat", "lon"])['hour'].agg({'hourrange': lambda x: x.max() - x.min()})], axis=1)

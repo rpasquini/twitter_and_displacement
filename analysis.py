@@ -101,7 +101,9 @@ def iteratorofpendinggeometries(db,collection_destination_name):
 
 
 
-def  count_by_residents_and_timefreq(db, geometry, freq='Q'):
+
+
+def  count_tweets_by_residents_and_timefreq(db, geometry, freq='Q'):
 
     """Process to obtain counts of residents and non-residents tweets, and related time based aggregations by censal radius
 
@@ -155,6 +157,26 @@ def  count_by_residents_and_timefreq(db, geometry, freq='Q'):
 
 
 
+def count_users(db, geometry, freq='Q'):
+
+    """Process to obtain counts of users by censal radius
+
+    :param geometry: geometry in geojson format
+    :param freq: managed by timebasedaggregation, is the frequency of aggregation
+    :param db: mongo database connection
+
+    :return: count in json
+
+    """
+    #Find users in radio and convert to df
+    userslivinginradio = db.users.find({'home.location': {'$geoWithin': {'$geometry': geometry}}}).count()
+
+    result = {'totalusers': userslivinginradio}
+
+    return json.dumps(result)
+
+
+
 
 
 def timebasedaggregation(df3, name, frequency='Q'):
@@ -175,11 +197,22 @@ def timebasedaggregation(df3, name, frequency='Q'):
 
 
 
-def counterjob(db, sizeofchunk=20):
+def counterjob(db, sizeofchunk=20, methodtorun=count_tweets_by_residents_and_timefreq, destination_collection_name='radiocounts'):
 
-    "Counter Job. Inserts with chunks"
+    """This function administers the implementation of methods at the geometry level. Checks which geometries are pending, and writes the resutls with chunks.
+    This version proceeds in order using the iterator
+
+    :param db: mongo database connection
+    :param methodtorun: algorithm to apply to the given geometry
+    :param sizeofchunk: population is done with insert_many
+
+    :return
+
+    """
+
     starttime=time.time()
-    pendingradiositerator = iteratorofpendinggeometries(db, 'radioscounts')
+    # the following creates an iterator of the geometries that were not already processed and stored in collection destination_collection_name
+    pendingradiositerator = iteratorofpendinggeometries(db, destination_collection_name)
     therearependingjobs=True
     jobtimes=[]
     while therearependingjobs:
@@ -191,10 +224,10 @@ def counterjob(db, sizeofchunk=20):
             except StopIteration:
                 therearependingjobs=False
                 break
-            countresultsdict=json.loads(count_by_residents_and_timefreq(db, nextinlineradio['geometry']))
+            countresultsdict=json.loads(methodtorun(db, nextinlineradio['geometry']))
             countresultsdict.update({'COD_2010_1' : nextinlineradio['COD_2010_1']})
             listofjobresults.append(countresultsdict)
-        db.radioscounts.insert_many(listofjobresults)
+        db[destination_collection_name].insert_many(listofjobresults)
         jobtimes.append(time.time()-startjobtime)
         print("job time:",time.time()-startjobtime)
 
