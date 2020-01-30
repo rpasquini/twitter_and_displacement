@@ -239,6 +239,8 @@ def timeofdayplot(db,uid):
     plt.rcParams['figure.figsize'] = [5, 5] #this sets the size of the figure
 
     dfi=pd.DataFrame(list(db.tweets.find({'u_id':uid})))
+    dfi = pd.concat([dfi, dfi.location.apply(lambda x: x['coordinates'][0]).rename('lon'),
+                     dfi.location.apply(lambda x: x['coordinates'][1]).rename('lat')], axis=1)
     dfi['hour']=pd.to_datetime(dfi['created_at'] // 1000, unit='s').dt.hour
     x=pd.to_datetime(dfi['created_at'] // 1000, unit='s').dt.hour
     lat=dfi.lat
