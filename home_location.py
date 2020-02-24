@@ -23,19 +23,22 @@ crs_ciudad={'proj': 'tmerc',
  'no_defs': True}
 
 
-
-def df_to_gdf(input_df, crs=4326):
+def df_to_gdf(input_df, crs=4326, lon='lon', lat='lat'):
     """
     Convert a DataFrame with lon  and lat as columns to GeoDataFrame.
+
+    Following options are useful if changing the names of the latitude and longitude fields:
+    lon: name of longitude field
+    lat: name of latitude field
     """
     df = input_df.copy()
 
-    geometry = [Point(xy) for xy in zip(df.lon, df.lat)]
-    gdf=gpd.GeoDataFrame(df, crs=crs, geometry=geometry)
-    #reproject
-    gdf.crs = {'init' :'epsg:4326'}
-    #gdf=gdf.loc[(gdf['lon']>-59) & (gdf['lon']<-58) & (gdf['lat']>-35) & (gdf['lat']<-34)]
-    #gdf=gdf.to_crs(crs_ciudad)
+    geometry = [Point(xy) for xy in zip(df[lon], df[lat])]
+    gdf = gpd.GeoDataFrame(df, crs=crs, geometry=geometry)
+    # reproject
+    gdf.crs = {'init': 'epsg:4326'}
+    # gdf=gdf.loc[(gdf['lon']>-59) & (gdf['lon']<-58) & (gdf['lat']>-35) & (gdf['lat']<-34)]
+    # gdf=gdf.to_crs(crs_ciudad)
     return gdf
 
 def muestraprecisionproyeccionCABA():
@@ -58,34 +61,31 @@ def muestraprecisionproyeccionCABA():
 
 
 class Homelocation:
-
     "Stores home location algorithm results"
+
     # EL OUTPUT RELEVANTE ES ['distanciaatipica','distalcentroide_estandar','desvio_MEAN_distancias']
 
     def __init__(self):
-        self.completed= False
+        self.completed = False
         self.reason = 'unknown'
 
     def loadresults(self, gdfi, freqdfi, homecoordinates, workcoordinates):
-        self.gdfi=gdfi
-        self.freqdfi=freqdfi
-        self.homecoordinates=homecoordinates
-        self.workcoordinates=workcoordinates
+        self.gdfi = gdfi
+        self.freqdfi = freqdfi
+        self.homecoordinates = homecoordinates
+        self.workcoordinates = workcoordinates
         self.completed = True
 
-
     def tweetsfromhome(self):
-        return self.gdfi[(self.gdfi['lat']==self.homecoordinates['lat'])&(self.gdfi['lon']==self.homecoordinates['lon'])]
+        return self.gdfi[
+            (self.gdfi['latr'] == self.homecoordinates['latr']) & (self.gdfi['lonr'] == self.homecoordinates['lonr'])]
+
     def tweetsfromwork(self):
-        return self.gdfi[(self.gdfi['lat']==self.workcoordinates['lat'])&(self.gdfi['lon']==self.workcoordinates['lon'])]
+        return self.gdfi[
+            (self.gdfi['latr'] == self.workcoordinates['latr']) & (self.gdfi['lonr'] == self.workcoordinates['lonr'])]
 
 
-
-
-
-
-def findhome(db,uid, map=True):
-
+def findhome(db, uid, method='latlon', map=True):
     """
     Finds home for user id.
 
@@ -93,138 +93,156 @@ def findhome(db,uid, map=True):
     :param uid: user id
     :return: Homelocation class element. Contains georeferenced tweets, frequency table and home coordinates
     """
+    dfi = pd.DataFrame(list(db.tweets.find({'u_id': uid})))
 
-
-    dfi=pd.DataFrame(list(db.tweets.find({'u_id':uid})))
-
-    #in the new data it is necessary to unfold the json containing coordinates into columns
+    # in the new data it is necessary to unfold the json containing coordinates into columns
     dfi = pd.concat([dfi, dfi.location.apply(lambda x: x['coordinates'][0]).rename('lon'),
                      dfi.location.apply(lambda x: x['coordinates'][1]).rename('lat')], axis=1)
 
-    if dfi.shape[0]>30:
-        dfi['hour']=pd.to_datetime(dfi['created_at'] // 1000, unit='s').dt.hour
-        #nighttime dummy
+    # Adding hex resolution 9 to dfi
+    dfi = pd.concat([dfi, dfi.hex.apply(lambda x: x['9']).rename('hex9')], axis=1)
+
+    if dfi.shape[0] > 30:
+
+        # 1. Adding relevant info to dfi
+        dfi['hour'] = pd.to_datetime(dfi['created_at'] // 1000, unit='s').dt.hour
+        # nighttime dummy
         dfi['night'] = (dfi['hour'] < 7) | (dfi['hour'] > 22)
-
-
-        dfi['dayofweek']=pd.to_datetime(dfi['created_at'] // 1000, unit='s').dt.dayofweek
-        #dayofweekdummy
+        dfi['dayofweek'] = pd.to_datetime(dfi['created_at'] // 1000, unit='s').dt.dayofweek
+        # dayofweekdummy
         # Monday=0, Sunday=6. so weekend is 5 or 6
         dfi['weekend'] = (dfi['dayofweek'] == 5) | (dfi['dayofweek'] == 6)
 
+        # 2. Frequency aggregation
 
-        # this is a critical step, which imposes that coordinates precision in degress will be up to the second decimal (equivalent to 110 meters in CABA proyection)
-        dfi=dfi.round({'lat': 2, 'lon': 2})
+        if method == 'hex9':
 
-        #freqdfi is dataframe at the location level aimed to counts tweets by location.
-        freqdfi=dfi.groupby(["lat", "lon"]).size().reset_index(name="freq").sort_values(by=['freq'], ascending=False)
+            spatialgroup = ["hex9"]
 
-        rangedfi=pd.concat([dfi.groupby(["lat", "lon"])['hour'].agg({'hourrange': lambda x: x.max() - x.min()})], axis=1)
+        else:  # method='latlon':
 
-        nightdf=dfi.loc[dfi['night']==True].groupby(["lat", "lon"]).size().reset_index(name="night_freq").sort_values(by=["night_freq"], ascending=False)
+            # method='latlon' computes frequency on rounded coordinates
+            # this is a critical step, which imposes that coordinates precision in degress will be up to the second decimal (equivalent to 110 meters in CABA proyection)
+            rounded_coordinates = dfi[['lat', 'lon']].round({'lat': 2, 'lon': 2}).rename(
+                columns={'lat': 'latr', 'lon': 'lonr'})
+            dfi = pd.concat([dfi, rounded_coordinates], axis=1)
 
-        weekenddf=dfi.loc[dfi['weekend']==True].groupby(["lat", "lon"]).size().reset_index(name="weekend_freq").sort_values(by=["weekend_freq"], ascending=False)
+            spatialgroup = ["latr", "lonr"]
 
+        # freqdfi is dataframe at the location level aimed to counts tweets by location.
+        freqdfi = dfi.groupby(spatialgroup).size().reset_index(name="freq").sort_values(by=['freq'], ascending=False)
 
-        uniquehours=dfi.groupby(["lat", "lon"])['hour'].nunique().reset_index(name="uniquehours")
+        rangedfi = pd.concat([dfi.groupby(spatialgroup)['hour'].agg({'hourrange': lambda x: x.max() - x.min()})],
+                             axis=1)
 
-        freqdfi=pd.merge(freqdfi,uniquehours,  how='left', left_on=['lat','lon'], right_on = ['lat','lon'])
-        freqdfi=pd.merge(freqdfi,rangedfi,  how='left', left_on=['lat','lon'], right_on = ['lat','lon'])
-        freqdfi=pd.merge(freqdfi,nightdf,  how='left', left_on=['lat','lon'], right_on = ['lat','lon'])
-        freqdfi=pd.merge(freqdfi,weekenddf,  how='left', left_on=['lat','lon'], right_on = ['lat','lon'])
+        nightdf = dfi.loc[dfi['night'] == True].groupby(spatialgroup).size().reset_index(name="night_freq").sort_values(
+            by=["night_freq"], ascending=False)
 
+        weekenddf = dfi.loc[dfi['weekend'] == True].groupby(spatialgroup).size().reset_index(
+            name="weekend_freq").sort_values(by=["weekend_freq"], ascending=False)
 
-        freqdfi.loc[freqdfi['night_freq'].isna(),'night_freq']=0
-        freqdfi.loc[freqdfi['weekend_freq'].isna(),'weekend_freq']=0
+        uniquehours = dfi.groupby(spatialgroup)['hour'].nunique().reset_index(name="uniquehours")
 
+        freqdfi = pd.merge(freqdfi, uniquehours, how='left', left_on=spatialgroup, right_on=spatialgroup)
+        freqdfi = pd.merge(freqdfi, rangedfi, how='left', left_on=spatialgroup, right_on=spatialgroup)
+        freqdfi = pd.merge(freqdfi, nightdf, how='left', left_on=spatialgroup, right_on=spatialgroup)
+        freqdfi = pd.merge(freqdfi, weekenddf, how='left', left_on=spatialgroup, right_on=spatialgroup)
 
-        freqdfi=df_to_gdf(freqdfi)
-        freqdfi['distance']=[freqdfi.iloc[0].geometry.distance(freqdfi.iloc[i].geometry)*11092.82 for i in range(0,freqdfi.shape[0])]
+        freqdfi.loc[freqdfi['night_freq'].isna(), 'night_freq'] = 0
+        freqdfi.loc[freqdfi['weekend_freq'].isna(), 'weekend_freq'] = 0
 
+        # Distances computation. In case the method is lat lon, it also retrieves distances between most frequent coordinate and the following
+
+        if method == 'latlon':
+            freqdfi = df_to_gdf(freqdfi, lon='lonr', lat='latr')  # requires lat and lon coordinates
+            freqdfi['distance'] = [freqdfi.iloc[0].geometry.distance(freqdfi.iloc[i].geometry) * 11092.82 for i in
+                                   range(0, freqdfi.shape[0])]
 
         ############################################
         # Candidates selection
 
-        #1) seleccion ubicaciones con una frecuencia atipicamente alta: el porcentaje de tweets es atipicamente alto.
+        # 1) seleccion ubicaciones con una frecuencia atipicamente alta: el porcentaje de tweets es atipicamente alto.
 
         # cuanta importancia representa en relacion a la ubicacion más frecuente
-        freqdfi['freqp1']=freqdfi['freq']/freqdfi['freq'].iloc[0]
+        freqdfi['freqp1'] = freqdfi['freq'] / freqdfi['freq'].iloc[0]
 
-        freqdfi=freqdfi.loc[freqdfi['freqp1']>0.1]
+        freqdfi = freqdfi.loc[freqdfi['freqp1'] > 0.1]
 
         ############################################
         # Home location criteria
 
-        #2) entre estos, la casa es la que tiene alta frecuencia durante la noche y ademas el fin de semana
+        # 2) entre estos, la casa es la que tiene alta frecuencia durante la noche y ademas el fin de semana
         # el trabajo es el que no tiene frecuencia durante la noche y tiene frecuencia en el horario laboral.
 
         # pocentaje durante la noche
-        freqdfi['pnight_freq']=freqdfi['night_freq']/freqdfi['freq']
+        freqdfi['pnight_freq'] = freqdfi['night_freq'] / freqdfi['freq']
 
         # porcentaje de fin de semana
-        freqdfi['pweekend_freq']=freqdfi['weekend_freq']/freqdfi['freq']
+        freqdfi['pweekend_freq'] = freqdfi['weekend_freq'] / freqdfi['freq']
 
+        freqdfi['interactnightyweekend'] = freqdfi['pnight_freq'] * freqdfi['pweekend_freq']
 
-        freqdfi['interactnightyweekend']=freqdfi['pnight_freq']*freqdfi['pweekend_freq']
-
-
-        #busco la maxima
-        homecoordinates=freqdfi.sort_values(by=['interactnightyweekend'], ascending=False).iloc[0]
-
+        # busco la maxima
+        homecoordinates = freqdfi.sort_values(by=['interactnightyweekend'], ascending=False).iloc[0]
 
         ############################################
         # Work criteria
         # work here is any place where the person goes frequently outside his/her home. Could be school, university etc
         # between the candidate locations is the one that maximizes day and week
 
-        freqdfi['pday_freq']=1-freqdfi['pnight_freq']
-        freqdfi['pweekday_freq']=1-freqdfi['pweekend_freq']
-        freqdfi['interactdayyweekday']=freqdfi['pday_freq']*freqdfi['pweekday_freq']
+        freqdfi['pday_freq'] = 1 - freqdfi['pnight_freq']
+        freqdfi['pweekday_freq'] = 1 - freqdfi['pweekend_freq']
+        freqdfi['interactdayyweekday'] = freqdfi['pday_freq'] * freqdfi['pweekday_freq']
 
         # elimino la fila de homecoordinates y luego maximizo dia y weekday
         try:
-            workcoordinates=freqdfi.drop([homecoordinates.name]).sort_values(by=['interactdayyweekday'], ascending=False).iloc[0]
+            workcoordinates = \
+            freqdfi.drop([homecoordinates.name]).sort_values(by=['interactdayyweekday'], ascending=False).iloc[0]
         except IndexError:
             homeresults = Homelocation()
             homeresults.reason = 'No work coordinates'
             return homeresults
 
-        gdfi=df_to_gdf(dfi, crs='+init=epsg:4326')
-        gdfi=gdfi.to_crs(crs_ciudad)
+        gdfi = df_to_gdf(dfi, crs='+init=epsg:4326')
+        gdfi = gdfi.to_crs(crs_ciudad)
 
+        if map == True:
+            # plt.gca().patch.set_facecolor('white')
+            # plt.rcParams['figure.facecolor'] = 'white'
+            # fig = plt.figure()
+            # fig.patch.set_facecolor('white')
+            plt.rcParams['figure.figsize'] = [10, 10]  # this sets the size of the figure
 
-        if map==True:
-            #plt.gca().patch.set_facecolor('white')
-            #plt.rcParams['figure.facecolor'] = 'white'
-            #fig = plt.figure()
-            #fig.patch.set_facecolor('white')
-            plt.rcParams['figure.figsize'] = [10, 10] #this sets the size of the figure
-
-            base=Provincia.to_crs(crs_ciudad).plot(markersize=6, color="gray", alpha=0.2, edgecolor='white',linewidth=4)
+            base = Provincia.to_crs(crs_ciudad).plot(markersize=6, color="gray", alpha=0.2, edgecolor='white',
+                                                     linewidth=4)
 
             minx, miny, maxx, maxy = gdfi.total_bounds
-            minx=minx-10000
-            miny=miny-10000
-            maxx=maxx+10000
-            maxy=maxy+10000
+            minx = minx - 10000
+            miny = miny - 10000
+            maxx = maxx + 10000
+            maxy = maxy + 10000
             base.set_xlim(minx, maxx)
             base.set_ylim(miny, maxy)
-            #rdf.plot(ax=base,color='blue', markersize=5)
+            # rdf.plot(ax=base,color='blue', markersize=5)
 
             gdfi.plot(ax=base)
 
-            gdfi[(gdfi['lat']==homecoordinates['lat'])&(gdfi['lon']==homecoordinates['lon'])].plot(ax=base, color='red')
+            print('Home in red')
+            print('Notice than more than one point might result in red due to coordinates precision')
 
-            #mapping points with home coordinates
-            gdfi['home']=0
-            gdfi.loc[(gdfi['lat']==homecoordinates['lat'])&(gdfi['lon']==homecoordinates['lon']),'home']=1
+            gdfi[(gdfi['latr'] == homecoordinates['latr']) & (gdfi['lonr'] == homecoordinates['lonr'])].plot(ax=base,
+                                                                                                         color='red')
 
-        homeresults=Homelocation()
+            # mapping points with home coordinates
+            gdfi['home'] = 0
+            gdfi.loc[(gdfi['latr'] == homecoordinates['latr']) & (gdfi['lonr'] == homecoordinates['lonr']), 'home'] = 1
+
+        homeresults = Homelocation()
         homeresults.loadresults(gdfi, freqdfi, homecoordinates, workcoordinates)
 
     else:
 
-        homeresults=Homelocation()
+        homeresults = Homelocation()
         homeresults.reason = 'less than 30 tweets'
 
     return homeresults

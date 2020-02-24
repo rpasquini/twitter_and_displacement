@@ -11,7 +11,7 @@ The project handles large databases of tweets (it is being tested on 20 million 
 
 # Dependencies and Installation
 
-The project is written in Python.
+The project is written in Python 3.6.
 Uses MongoDB as a database. A few functions are available for initial population of tweets.  
 For Spatial analysis tasks this project uses [GeoPandas](https://geopandas.org/) and the [H3 library](https://github.com/uber/h3).
 
