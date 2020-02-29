@@ -285,6 +285,92 @@ def timeofdayplot(db,uid):
     plt.show()
 
 
+##########The following are db related functions and the iteration jobs
+
+def updatehomelocation(db, uid, homedata):
+    "Updates home location in users collection. Upsert function"
+    """
+    :param uid: user id
+    :param homedata: home data json
+
+    """
+
+    query = {'u_id': uid}
+    newvalues = {'$set': homedata}
+
+    db.users.update(query, newvalues, upsert=True)
+
+def correct_encoding(dictionary):
+    """Correct the encoding of python dictionaries so they can be encoded to mongodb
+    inputs
+    -------
+    dictionary : dictionary instance to add as document
+    output
+    -------
+    new : new dictionary with (hopefully) corrected encodings"""
+
+    new = {}
+    for key1, val1 in dictionary.items():
+        # Nested dictionaries
+        if isinstance(val1, dict):
+            val1 = correct_encoding(val1)
+
+        if isinstance(val1, np.bool_):
+            val1 = bool(val1)
+
+        if isinstance(val1, np.int64):
+            val1 = int(val1)
+
+        if isinstance(val1, np.float64):
+            val1 = float(val1)
+
+        new[key1] = val1
+
+    return new
+
+def findhomeandpopulate(uid, db, method='latlon'):
+    "Find home for user id and populate users with result function"
+
+    if method == 'hex9':
+        result = home.findhome(db, uid, method='hex9', map=False)
+    else:
+        result = home.findhome(db, uid, map=False)
+
+    if result.completed is not False:
+        homedata = result.homecoordinates.to_dict()
+
+        if method == 'latlon':  # only w/homelocation latlon method delete geometry field
+            del homedata['geometry']
+            homedata = correct_encoding(homedata)
+            homedata2 = homedata.copy()
+            del homedata2['latr']
+            del homedata2['lonr']
+            dicttopopulate = {'home': {'home_stats': homedata2, 'location': {'type': "Point",
+                                                                             'coordinates': [homedata['lonr'],
+                                                                                             homedata['latr']]}}}
+            updatehomelocation(db, uid, dicttopopulate)
+            # print(dicttopopulate)
+
+        if method == 'hex9':
+            homedata = correct_encoding(homedata)
+            dicttopopulate = {'hex9': homedata}
+            updatehomelocation(db, uid, dicttopopulate)
+            # print(dicttopopulate)
+
+
+
+def job_findhomeandpopulate_hex9():
+
+    """Iteration over all users that do not have hex9
+    Find home and populate hex9"""
+
+    cursorpendientes=db.users.find( { 'hex9': { '$exists': False } } )
+    for doc in cursorpendientes:
+        uid=doc['u_id']
+        commu.findhomeandpopulate(uid, db, method='hex9')
+
+
+
 if __name__ == "__main__":
     import communicationwmongo as commu
     db=commu.connecttoLocaldb(database='twitter')

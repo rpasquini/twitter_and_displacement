@@ -235,6 +235,8 @@ def counterjob(db, sizeofchunk=20, methodtorun=count_tweets_by_residents_and_tim
     print('total elapsed time ',endtime-starttime)
 
 
+
+
 if __name__ == "__main__":
 
     import communicationwmongo as commu
