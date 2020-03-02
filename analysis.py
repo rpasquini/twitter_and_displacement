@@ -4,6 +4,7 @@ from shapely.geometry import Point, Polygon
 import matplotlib.pyplot as plt
 import json
 import time
+from h3 import h3
 plt.rcParams['figure.figsize'] = [10, 10]
 
 
@@ -235,6 +236,176 @@ def counterjob(db, sizeofchunk=20, methodtorun=count_tweets_by_residents_and_tim
     print('total elapsed time ',endtime-starttime)
 
 
+
+def tweets_in_hex_df(db, hexid, resolution='9'):
+    """
+    resolution:  9 or 10 in string """
+
+    hexfieldname_indb = 'hex.' + resolution
+    columnname_indataframe = 'hex' + resolution
+
+    tweets_in_hex_cursor = db.tweets.find({hexfieldname_indb: hexid})
+
+    tweets_in_hex_df = pd.DataFrame(list(tweets_in_hex_cursor))
+
+    # extract the hex9 data in the json into a new column
+    tweets_in_hex_df = pd.concat([tweets_in_hex_df,
+                                  tweets_in_hex_df.apply(lambda x: x['hex'][resolution], axis=1).rename(
+                                      columnname_indataframe)], axis=1)
+
+    return tweets_in_hex_df
+
+
+def users_in_hex_list(db, hexid, resolution='9'):
+    """
+    resolution:  9 or 10 in string """
+
+    hexfieldname_indb = 'hex' + resolution + "." + 'hex' + resolution
+    users_in_hex_cursor = db.users.find({hexfieldname_indb: hexid})
+    users_in_hex_df = pd.DataFrame(list(users_in_hex_cursor))
+    try:
+        users_in_hex_list = list(users_in_hex_df['u_id'])
+    except KeyError:
+        users_in_hex_list =[] #returns empty
+
+    return users_in_hex_list
+
+
+def users_in_hex_plus_neighbors_list(db, hexid, contiguity=1, resolution='9'):
+    """Adding neigbors of specified contiguity using h3 ring functions
+
+    # comment> Shouldnt be necessary to specify resolution once hexid is given> check h3 documentation to obtain resoltuion on the basis of hexid
+    """
+
+    neighboring_hex_list = list(h3.k_ring_distances(hexid, ring_size=contiguity)[contiguity])
+
+    # funcion para graficar los poligonos
+    # gdf=hexlist_to_geodataframe(neighboring_hex_list)
+    # gdf.plot()
+
+    users_in_hex_plus_neighbors_list = []
+
+    users_in_hex_list2 = users_in_hex_list(db, hexid, resolution=resolution)
+
+    users_in_hex_plus_neighbors_list.extend(users_in_hex_list2)  # adding first those living in hex
+
+    hexfieldname_indb = 'hex' + resolution + "." + 'hex' + resolution
+
+    for n_hexid in neighboring_hex_list:
+
+        users_in_n_hex_cursor = db.users.find({hexfieldname_indb: n_hexid})
+        users_in_n_hex_df = pd.DataFrame(list(users_in_n_hex_cursor))
+
+        try:
+            users_in_n_hex_list = list(users_in_n_hex_df['u_id'])
+        except KeyError:
+            pass
+        else:
+            users_in_hex_plus_neighbors_list.extend(users_in_n_hex_list)
+    return users_in_hex_plus_neighbors_list
+
+
+def tweets_from_hex_residents(db, hexid, resolution='9'):
+    tweets_in_hex_df2 = tweets_in_hex_df(db, hexid, resolution=resolution)
+
+    users_in_hex_list2 = users_in_hex_list(db, hexid, resolution=resolution)
+
+    # queda pendiente separar los tweets de los residentes:
+    # tweets de residentes
+    tweets_from_residents = tweets_in_hex_df2[tweets_in_hex_df2['u_id'].isin(users_in_hex_list2)]
+
+    return tweets_from_residents
+
+
+def tweets_from_hex_non_residents(db, hexid, resolution='9'):
+    tweets_in_hex_df2 = tweets_in_hex_df(db, hexid, resolution=resolution)
+
+    users_in_hex_list2 = users_in_hex_list(db, hexid, resolution=resolution)
+
+    # tweets de no residentes
+    tweets_from_non_residents = tweets_in_hex_df2[~tweets_in_hex_df2['u_id'].isin(users_in_hex_list2)]
+
+    return tweets_from_non_residents
+
+
+def tweets_from_non_residents_and_non_neighbors(db, hexid, contiguity=1, resolution='9'):
+    tweets_in_hex_df2 = tweets_in_hex_df(db, hexid, resolution=resolution)
+
+    users_in_hex_list2 = users_in_hex_list(db, hexid, resolution=resolution)
+
+    users_in_hex_plus_neighbors_list2 = users_in_hex_plus_neighbors_list(db, hexid, contiguity=1, resolution='9',db=db)
+
+    # tweets de no residentes y no vecinos
+    tweets_from_non_residents_and_non_neighbors = tweets_in_hex_df2[
+        ~tweets_in_hex_df2['u_id'].isin(users_in_hex_plus_neighbors_list2)]
+
+    return tweets_from_non_residents_and_non_neighbors
+
+
+
+
+def countsby_residents_and_non_residents(db, hexid, contiguity=1, resolution='9', freq='Q'):
+    """
+    Counts by residents and non residents.
+
+    including neighbors
+
+    :param hexid:
+    :param contiguity:
+    :param resolution:
+    :param freq:
+    :return: json of counts
+
+    """
+    tweets_in_hex_df2 = tweets_in_hex_df(db, hexid, resolution=resolution)
+
+    users_in_hex_list2 = users_in_hex_list(db, hexid, resolution=resolution)
+
+    users_in_hex_plus_neighbors_list2 = users_in_hex_plus_neighbors_list(db, hexid, contiguity=contiguity, resolution='9')
+
+    if tweets_in_hex_df2.shape[0] > 0:
+
+        totalcountsdict = json.loads(timebasedaggregation(tweets_in_hex_df2, 'totalcounts', frequency=freq))
+
+        if len(users_in_hex_list2) > 0:  # therefore there are residents
+
+            tweets_from_residents2 = tweets_in_hex_df2[tweets_in_hex_df2['u_id'].isin(users_in_hex_list2)]
+            tweets_from_non_residents2 = tweets_in_hex_df2[~tweets_in_hex_df2['u_id'].isin(users_in_hex_list2)]
+            tweets_from_non_residents_and_non_neighbors2 = tweets_in_hex_df2[
+                ~tweets_in_hex_df2['u_id'].isin(users_in_hex_plus_neighbors_list2)]
+
+            residentsdict = json.loads(timebasedaggregation(tweets_from_residents2, 'residents', frequency=freq))
+            nonresidentsdict = json.loads(
+                timebasedaggregation(tweets_from_non_residents2, 'nonresidents', frequency=freq))
+            nonresidentsandnonneighborsdict = json.loads(
+                timebasedaggregation(tweets_from_non_residents_and_non_neighbors2, 'nonresidentsandnonneighbors',
+                                     frequency=freq))
+
+            # aggregation of dicts
+            result = {**totalcountsdict, **residentsdict, **nonresidentsdict, **nonresidentsandnonneighborsdict}
+
+        else:  # there are no users living in the radius (no residents), therefore all non residents
+            residentsdict = {'residents': {}}
+            tweets_from_non_residents2 = tweets_in_hex_df2[~tweets_in_hex_df2['u_id'].isin(users_in_hex_list2)]
+            tweets_from_non_residents_and_non_neighbors2 = tweets_in_hex_df2[
+                ~tweets_in_hex_df2['u_id'].isin(users_in_hex_plus_neighbors_list2)]
+            nonresidentsdict = json.loads(
+                timebasedaggregation(tweets_from_non_residents2, 'nonresidents', frequency=freq))
+            nonresidentsandnonneighborsdict = json.loads(
+                timebasedaggregation(tweets_from_non_residents_and_non_neighbors2, 'nonresidentsandnonneighbors',
+                                     frequency=freq))
+            # aggregation of dicts
+            result = {**totalcountsdict, **residentsdict, **nonresidentsdict, **nonresidentsandnonneighborsdict}
+
+
+    else:  # returns an empy dict
+        result = {'totalcounts': {},
+                  'residents': {},
+                  'nonresidents': {},
+                  'nonresidentsandnonneighbors': {}}
+
+    # print(result)
+    return json.dumps(result)
 
 
 if __name__ == "__main__":
