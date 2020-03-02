@@ -408,6 +408,29 @@ def countsby_residents_and_non_residents(db, hexid, contiguity=1, resolution='9'
     return json.dumps(result)
 
 
+
+def countandpopulatejob():
+    """
+    Simple job to implement countsby_residents_and_non_residents
+    and populate into hexcounts collection
+
+    :return:
+    """
+    cursorx = db.hexcounts.find({'totalcounts': {'$exists': False}})
+    continuar = 1
+    while continuar == 1:
+        try:
+            hexid = next(cursorx)['_id']
+
+        except StopIteration:
+            print('fin')
+            break
+
+        result = a.countsby_residents_and_non_residents(db, hexid, contiguity=1, resolution='9', freq='Q')
+        db.hexcounts.update_one({'_id': hexid}, {'$set': json.loads(result)}, upsert=False)
+
+
+
 if __name__ == "__main__":
 
     import communicationwmongo as commu
