@@ -409,26 +409,58 @@ def countsby_residents_and_non_residents(db, hexid, contiguity=1, resolution='9'
 
 
 
-def countandpopulatejob():
+def countandpopulatejob(db):
+
     """
     Simple job to implement countsby_residents_and_non_residents
     and populate into hexcounts collection
 
-    :return:
     """
+    print('Hexagons pending to analyze..', db.hexcounts.count_documents({'totalcounts': { '$exists': False} }))
+
     cursorx = db.hexcounts.find({'totalcounts': {'$exists': False}})
     continuar = 1
+    j=1
     while continuar == 1:
         try:
             hexid = next(cursorx)['_id']
+            if (j/50).is_integer(): #printing each 50 hexs
+                print('iter:',j)
+            j=j+1
+
 
         except StopIteration:
             print('fin')
             break
 
-        result = a.countsby_residents_and_non_residents(db, hexid, contiguity=1, resolution='9', freq='Q')
+        result = countsby_residents_and_non_residents(db, hexid, contiguity=1, resolution='9', freq='Q')
         db.hexcounts.update_one({'_id': hexid}, {'$set': json.loads(result)}, upsert=False)
 
+
+def hexcountsresults_to_df(db, save=False):
+
+    """ Converts hexcounts collection containing resuts to a dataframe"""
+
+    #para pasar de la coleccion al dataframe
+    #voy a loopear la coleccion, convertir cada documento en un dataframe y despues unirlos
+    cursor=db.hexcounts.find()
+    listofdfis=[]
+
+    for doc in cursor:
+        dfi=pd.DataFrame(doc).reset_index().rename(columns={"index": "time"})
+
+        dfi['time']=pd.to_datetime(pd.to_numeric(dfi['time'], errors='coerce') // 1000, unit='s' )
+
+        listofdfis.append(dfi)
+
+    #print(listofdfis)
+    df=pd.concat(listofdfis)
+    df=df.reset_index(drop=True)
+
+    if save:
+        df.to_pickle("./hexcountsdf.pkl")
+
+    return df
 
 
 if __name__ == "__main__":

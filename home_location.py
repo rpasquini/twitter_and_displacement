@@ -5,11 +5,11 @@ import pandas as pd
 import geopandas as gpd
 from shapely.geometry import Point, Polygon, shape
 import matplotlib.pyplot as plt
+import numpy as np
 
 import os,sys,inspect
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
-barrios = gpd.read_file(currentdir+"/data/barrios_badata.shp")
-Provincia = gpd.read_file(currentdir+"/data/Provincia_2010.shp")
+#barrios = gpd.read_file(currentdir+"/data/barrios_badata.shp")
 
 
 crs_ciudad={'proj': 'tmerc',
@@ -85,7 +85,7 @@ class Homelocation:
             (self.gdfi['latr'] == self.workcoordinates['latr']) & (self.gdfi['lonr'] == self.workcoordinates['lonr'])]
 
 
-def findhome(db, uid, method='latlon', map=True):
+def findhome(db, uid, method='latlon', map=True, dataformat='raw'):
     """
     Finds home for user id.
 
@@ -94,10 +94,13 @@ def findhome(db, uid, method='latlon', map=True):
     :return: Homelocation class element. Contains georeferenced tweets, frequency table and home coordinates
     """
     dfi = pd.DataFrame(list(db.tweets.find({'u_id': uid})))
+    #print(dfi)
 
-    # in the new data it is necessary to unfold the json containing coordinates into columns
-    dfi = pd.concat([dfi, dfi.location.apply(lambda x: x['coordinates'][0]).rename('lon'),
-                     dfi.location.apply(lambda x: x['coordinates'][1]).rename('lat')], axis=1)
+    if dataformat!='raw':
+        # si la data no esta en formato raw, es porque esta en formato geolocation de mongo, y entonces tengo que hacer el unfold
+        # in the new data it is necessary to unfold the json containing coordinates into columns
+        dfi = pd.concat([dfi, dfi.location.apply(lambda x: x['coordinates'][0]).rename('lon'),
+                         dfi.location.apply(lambda x: x['coordinates'][1]).rename('lat')], axis=1)
 
     # Adding hex resolution 9 to dfi
     dfi = pd.concat([dfi, dfi.hex.apply(lambda x: x['9']).rename('hex9')], axis=1)
@@ -213,6 +216,7 @@ def findhome(db, uid, method='latlon', map=True):
             # fig.patch.set_facecolor('white')
             plt.rcParams['figure.figsize'] = [10, 10]  # this sets the size of the figure
 
+            Provincia = gpd.read_file(currentdir+"/data/Provincia_2010.shp")
             base = Provincia.to_crs(crs_ciudad).plot(markersize=6, color="gray", alpha=0.2, edgecolor='white',
                                                      linewidth=4)
 
@@ -332,9 +336,9 @@ def findhomeandpopulate(uid, db, method='latlon'):
     "Find home for user id and populate users with result function"
 
     if method == 'hex9':
-        result = home.findhome(db, uid, method='hex9', map=False)
+        result = findhome(db=db, uid=uid, method='hex9', map=False)
     else:
-        result = home.findhome(db, uid, map=False)
+        result = findhome(db=db, uid=uid, map=False)
 
     if result.completed is not False:
         homedata = result.homecoordinates.to_dict()
@@ -348,31 +352,37 @@ def findhomeandpopulate(uid, db, method='latlon'):
             dicttopopulate = {'home': {'home_stats': homedata2, 'location': {'type': "Point",
                                                                              'coordinates': [homedata['lonr'],
                                                                                              homedata['latr']]}}}
-            updatehomelocation(db, uid, dicttopopulate)
+            updatehomelocation(db=db, uid=uid, homedata=dicttopopulate)
             # print(dicttopopulate)
 
         if method == 'hex9':
             homedata = correct_encoding(homedata)
             dicttopopulate = {'hex9': homedata}
-            updatehomelocation(db, uid, dicttopopulate)
+            updatehomelocation(db=db, uid=uid, homedata=dicttopopulate)
             # print(dicttopopulate)
 
 
 
-def job_findhomeandpopulate_hex9():
+def job_findhomeandpopulate_hex9(db):
+
+    import warnings
+    warnings.simplefilter(action='ignore', category=FutureWarning)
 
     """Iteration over all users that do not have hex9
     Find home and populate hex9"""
+    print('Pending users to process...', db.users.count_documents({'hex9': { '$exists': False } }))
 
     cursorpendientes=db.users.find( { 'hex9': { '$exists': False } } )
+    j=1
     for doc in cursorpendientes:
         uid=doc['u_id']
-        commu.findhomeandpopulate(uid, db, method='hex9')
+        findhomeandpopulate(uid=uid, db=db, method='hex9')
+
+        if (j/50).is_integer(): #printing each 10 documents
+            print('iter:',j)
+        j=j+1
 
 
 
-if __name__ == "__main__":
-    import communicationwmongo as commu
-    db=commu.connecttoLocaldb(database='twitter')
-    findhome(db,286204686)
-    timeofdayplot(db,286204686)
+
+
