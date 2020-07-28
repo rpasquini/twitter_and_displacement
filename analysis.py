@@ -5,8 +5,10 @@ import matplotlib.pyplot as plt
 import json
 import time
 from h3 import h3
+import datetime
+import numpy as np
 plt.rcParams['figure.figsize'] = [10, 10]
-
+import my_h3_functions as myh3
 
 def read_radios_from_db(db, collectionname='radios'):
     """Takes results stored in the radios Mongo collection, prepares a gdf for analysis"""
@@ -461,6 +463,63 @@ def hexcountsresults_to_df(db, save=False):
         df.to_pickle("./hexcountsdf.pkl")
 
     return df
+
+
+def percent_change_two_periods_df(df, datebeforeandafterperiod=datetime.datetime(2013,6,30)):
+
+    """Creates a geodataframe with rate of change in hex counts between two periods determined by a chosen date
+    :param df: Hexcounts dataframe, which is a panel database at hex and time (quaterly)
+    :param datebeforeandafterperiod:
+    :return: geodataframe
+    """
+
+    """_ch stands for rate changes
+       dataframe also returns baseline period level data denoted p0
+       this is to check that there are enough data in baseline period"""
+
+    #Devuelve: Las variables que me interesan son nonresidents_ch	nonresidentsandnonneighbors_ch	residents_ch	totalcounts_ch
+    #que son los cambios porcentuales en tweeter usage.
+
+    df['period']=np.where(df.time>datebeforeandafterperiod,1,0)
+
+    #Tomar el promedio por periodo de hexcount
+    df2=df.groupby(['_id','period']).mean()
+    #df2
+
+    # Diferencias entre periodos para cada una de las variables
+    df2dif=df2.groupby('_id')['nonresidents', 'nonresidentsandnonneighbors', 'residents', 'totalcounts'].diff(1)
+
+    # Me voy a quedar por un lado con las diferencias en df2dif, y por otro lado con el periodo 0 en df20
+    df2dif=df2dif.reset_index()
+    df2dif=df2dif.loc[df2dif.period==1]
+    #df2dif
+
+    df2b=df2.reset_index()
+    df20=df2b.loc[df2b.period==0]
+
+    # Junto todo en un merge
+    dfnew=df2dif.merge(df20, left_on='_id', right_on='_id', suffixes=('_dif', '_p0'))
+    dfnew=dfnew.drop(columns=['period_dif', 'period_p0'])
+    #dfnew
+
+    # computo las tasas de crecimiento en las variables _ch
+    for var in ['nonresidents', 'nonresidentsandnonneighbors','residents','totalcounts']:
+        dfnew[var+'_ch']=dfnew[var+'_dif']/dfnew[var+'_p0']
+
+
+    # Las versiones b de las tasas de crecimiento son solo las tasas para aquellos lugares que tenian mas de 50 tweets en periodo 0
+    for var in ['nonresidents', 'nonresidentsandnonneighbors','residents','totalcounts']:
+        dfnew[var+'_ch'+'b']=np.where(dfnew[var+'_p0']>50,dfnew[var+'_ch'],np.NaN)
+
+    #Transformo a gdf usando la funcion que construi especialmente
+    gdfchanges=myh3.df_with_hexid_to_gdf(dfnew)
+
+    return gdfchanges
+
+
+
+
+
 
 
 if __name__ == "__main__":
