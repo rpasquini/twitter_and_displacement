@@ -45,3 +45,34 @@ def df_with_hexid_to_centroids_gdf(df, hexcolname='hexid'):
     geometria=seriesofcoordinates.apply(lambda row: Point(row[0],row[1]))
     gdf=gpd.GeoDataFrame(df, geometry=geometria)
     return gdf
+
+
+
+
+def kring_smoothing(df, hex_col, metric_col, k):
+    dfk = df[[hex_col]]
+    dfk.index = dfk[hex_col]
+    dfs =  (dfk[hex_col]
+                 .apply(lambda x: pd.Series(list(h3.k_ring(x,k)))).stack()
+                 .to_frame('hexk').reset_index(1, drop=True).reset_index()
+                 .merge(df[[hex_col,metric_col]]).fillna(0)
+                 .groupby(['hexk'])[[metric_col]].sum().divide((1 + 3 * k * (k + 1)))
+                 .reset_index()
+                 .rename(index=str, columns={"hexk": hex_col}))
+    dfs['lat'] = dfs[hex_col].apply(lambda x: h3.h3_to_geo(x)[0])
+    dfs['lng'] = dfs[hex_col].apply(lambda x: h3.h3_to_geo(x)[1])
+    return dfs
+
+
+def kring_smoother(hexgdf, metric_col='totalpobl', hexcolname='hexid'):
+
+    """ Applies a Kring smoother to hex dataframe, returns a gdf ready to plot
+    :param hexgdf: name of hex level geodataframe
+    :param metric_col: column to be smooth
+    :return: Hex gdf with smoothed column
+    """""
+    smooth_df=kring_smoothing(hexgdf, hexcolname, metric_col=metric_col, k=2)
+    smooth_df2=pd.read_json(smooth_df.to_json(orient='records'), orient='records') #wrap> reconstructing the dataframe to avoid unkown bug with kring_smoothing
+    hexsmoothgdf=df_with_hexid_to_gdf(smooth_df2, hexcolname=hexcolname)
+
+    return hexsmoothgdf
