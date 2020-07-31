@@ -135,8 +135,8 @@ def findhome(db, uid, method='latlon', map=True, dataformat='raw'):
         # freqdfi is dataframe at the location level aimed to counts tweets by location.
         freqdfi = dfi.groupby(spatialgroup).size().reset_index(name="freq").sort_values(by=['freq'], ascending=False)
 
-        rangedfi = pd.concat([dfi.groupby(spatialgroup)['hour'].agg({'hourrange': lambda x: x.max() - x.min()})],
-                             axis=1)
+        rangedfi = pd.DataFrame(dfi.groupby('hex9')['hour'].agg(lambda x: x.max() - x.min())).rename(
+        columns={'hour':'hourrange'})
 
         nightdf = dfi.loc[dfi['night'] == True].groupby(spatialgroup).size().reset_index(name="night_freq").sort_values(
             by=["night_freq"], ascending=False)
@@ -381,8 +381,3 @@ def job_findhomeandpopulate_hex9(db):
         if (j/50).is_integer(): #printing each 10 documents
             print('iter:',j)
         j=j+1
-
-
-
-
-

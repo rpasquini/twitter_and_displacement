@@ -277,7 +277,7 @@ def users_in_hex_plus_neighbors_list(db, hexid, contiguity=1, resolution='9'):
     # comment> Shouldnt be necessary to specify resolution once hexid is given> check h3 documentation to obtain resoltuion on the basis of hexid
     """
 
-    neighboring_hex_list = list(h3.k_ring_distances(hexid, ring_size=contiguity)[contiguity])
+    neighboring_hex_list = list(h3.k_ring_distances(hexid,contiguity)[contiguity])
 
     # funcion para graficar los poligonos
     # gdf=hexlist_to_geodataframe(neighboring_hex_list)

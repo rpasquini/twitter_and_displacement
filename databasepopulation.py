@@ -41,10 +41,10 @@ def add_hexs_and_prepare_bulk_request(df, dataformat='raw'):
 
     """
     if dataformat=='raw':
-        df2=df.apply(lambda row: h3.geo_to_h3(row['latitude'],row['longitude'],9), axis=1)
+        df2=df.apply(lambda row: h3.geo_to_h3(row['lat'],row['lon'],9), axis=1)
         df2.name='9'
 
-        df3=df.apply(lambda row: h3.geo_to_h3(row['latitude'],row['longitude'],10), axis=1)
+        df3=df.apply(lambda row: h3.geo_to_h3(row['lat'],row['lon'],10), axis=1)
         df3.name='10'
     else: #coordinates have been reshaped to location shape in mongo
 
