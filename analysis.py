@@ -439,7 +439,7 @@ def countandpopulatejob(db):
         db.hexcounts.update_one({'_id': hexid}, {'$set': json.loads(result)}, upsert=False)
 
 
-def hexcountsresults_to_df(db, save=False):
+def hexcountsresults_to_df_DEPRECATED(db, save=False):
 
     """ Converts hexcounts collection containing resuts to a dataframe"""
 
@@ -463,6 +463,36 @@ def hexcountsresults_to_df(db, save=False):
         df.to_pickle("./hexcountsdf.pkl")
 
     return df
+
+
+from pandas.io.json import json_normalize
+
+def hexcountsresults_to_df(db, save=False):
+
+    """ Converts hexcounts collection containing resuts to a dataframe"""
+
+    cursor=db.hexcounts.find()
+    #.limit(10)
+
+    prueba=pd.DataFrame(list(cursor) )
+
+    df1=pd.DataFrame(pd.concat([prueba[['_id']],json_normalize(prueba["nonresidents"])],axis=1 ).set_index('_id').stack()).reset_index().rename(columns={0:'nonresidents'})
+    df2=pd.DataFrame(pd.concat([prueba[['_id']],json_normalize(prueba["nonresidentsandnonneighbors"])],axis=1 ).set_index('_id').stack()).reset_index().rename(columns={0:'nonresidentsandnonneighbors'})
+    df3=pd.DataFrame(pd.concat([prueba[['_id']],json_normalize(prueba["residents"])],axis=1 ).set_index('_id').stack()).reset_index().rename(columns={0:'residents'})
+    df4=pd.DataFrame(pd.concat([prueba[['_id']],json_normalize(prueba["totalcounts"])],axis=1 ).set_index('_id').stack()).reset_index().rename(columns={0:'totalcounts'})
+
+
+    df1=df1.merge(df2,on=['_id','level_1'],how='outer')
+    df1=df1.merge(df3,on=['_id','level_1'],how='outer')
+    df1=df1.merge(df4,on=['_id','level_1'],how='outer')
+
+    df1['time']=pd.to_datetime(pd.to_numeric(df1['level_1'], errors='coerce') // 1000, unit='s' )
+    df1.drop(columns='level_1')
+
+    if save:
+        df1.to_pickle("./hexcountsdf.pkl")
+
+    return df1
 
 
 def percent_change_two_periods_df(df, datebeforeandafterperiod=datetime.datetime(2013,6,30)):
