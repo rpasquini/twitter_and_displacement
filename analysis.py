@@ -5,8 +5,10 @@ import matplotlib.pyplot as plt
 import json
 import time
 from h3 import h3
+import datetime
+import numpy as np
 plt.rcParams['figure.figsize'] = [10, 10]
-
+import my_h3_functions as myh3
 
 def read_radios_from_db(db, collectionname='radios'):
     """Takes results stored in the radios Mongo collection, prepares a gdf for analysis"""
@@ -73,10 +75,8 @@ def iteratorofpendinggeometries(db,collection_destination_name):
     When a new geometry is processed, it leaves a record in the collection_destination_name
     So the first thing will be to check which radios are not there.
     For those not in the destination collection, an interator including the radius code and the geometry in geojson format
-
     :param db: mongo database connection
     :return: nested json with time based aggregations
-
     """
 
     # retrieve the complete collection of radios
@@ -107,14 +107,10 @@ def iteratorofpendinggeometries(db,collection_destination_name):
 def  count_tweets_by_residents_and_timefreq(db, geometry, freq='Q'):
 
     """Process to obtain counts of residents and non-residents tweets, and related time based aggregations by censal radius
-
     :param geometry: geometry in geojson format
     :param freq: managed by timebasedaggregation, is the frequency of aggregation
     :param db: mongo database connection
-
-
     :return: nested json with time based aggregations
-
     """
 
     #Find users in radio and convert to df
@@ -161,13 +157,10 @@ def  count_tweets_by_residents_and_timefreq(db, geometry, freq='Q'):
 def count_users(db, geometry, freq='Q'):
 
     """Process to obtain counts of users by censal radius
-
-    :param geometry: geometry in geojson format
-    :param freq: managed by timebasedaggregation, is the frequency of aggregation
-    :param db: mongo database connection
-
-    :return: count in json
-
+        :param geometry: geometry in geojson format
+        :param freq: managed by timebasedaggregation, is the frequency of aggregation
+        :param db: mongo database connection
+        :return: count in json
     """
     #Find users in radio and convert to df
     userslivinginradio = db.users.find({'home.location': {'$geoWithin': {'$geometry': geometry}}}).count()
@@ -182,8 +175,7 @@ def count_users(db, geometry, freq='Q'):
 
 def timebasedaggregation(df3, name, frequency='Q'):
     """Timestamp based counts
-
-    :return Json """
+        :return Json """
 
     df3['timestamp'] = pd.to_datetime(df3['created_at'] // 1000, unit='s')
     df3['date'] = df3['timestamp'].dt.date
@@ -201,15 +193,12 @@ def timebasedaggregation(df3, name, frequency='Q'):
 def counterjob(db, sizeofchunk=20, methodtorun=count_tweets_by_residents_and_timefreq, destination_collection_name='radiocounts'):
 
     """This function administers the implementation of methods at the geometry level. Checks which geometries are pending, and writes the resutls with chunks.
-    This version proceeds in order using the iterator
-
-    :param db: mongo database connection
-    :param methodtorun: algorithm to apply to the given geometry
-    :param sizeofchunk: population is done with insert_many
-
-    :return
-
-    """
+        This version proceeds in order using the iterator
+        :param db: mongo database connection
+        :param methodtorun: algorithm to apply to the given geometry
+        :param sizeofchunk: population is done with insert_many
+        :return
+        """
 
     starttime=time.time()
     # the following creates an iterator of the geometries that were not already processed and stored in collection destination_collection_name
@@ -273,11 +262,10 @@ def users_in_hex_list(db, hexid, resolution='9'):
 
 def users_in_hex_plus_neighbors_list(db, hexid, contiguity=1, resolution='9'):
     """Adding neigbors of specified contiguity using h3 ring functions
-
-    # comment> Shouldnt be necessary to specify resolution once hexid is given> check h3 documentation to obtain resoltuion on the basis of hexid
+        # comment> Shouldnt be necessary to specify resolution once hexid is given> check h3 documentation to obtain resoltuion on the basis of hexid
     """
 
-    neighboring_hex_list = list(h3.k_ring_distances(hexid,contiguity)[contiguity])
+    neighboring_hex_list = list(h3.k_ring_distances(hexid, ring_size=contiguity)[contiguity])
 
     # funcion para graficar los poligonos
     # gdf=hexlist_to_geodataframe(neighboring_hex_list)
@@ -347,15 +335,12 @@ def tweets_from_non_residents_and_non_neighbors(db, hexid, contiguity=1, resolut
 def countsby_residents_and_non_residents(db, hexid, contiguity=1, resolution='9', freq='Q'):
     """
     Counts by residents and non residents.
-
-    including neighbors
-
-    :param hexid:
-    :param contiguity:
-    :param resolution:
-    :param freq:
-    :return: json of counts
-
+        including neighbors
+        :param hexid:
+        :param contiguity:
+        :param resolution:
+        :param freq:
+        :return: json of counts
     """
     tweets_in_hex_df2 = tweets_in_hex_df(db, hexid, resolution=resolution)
 
@@ -413,8 +398,7 @@ def countandpopulatejob(db):
 
     """
     Simple job to implement countsby_residents_and_non_residents
-    and populate into hexcounts collection
-
+        and populate into hexcounts collection
     """
     print('Hexagons pending to analyze..', db.hexcounts.count_documents({'totalcounts': { '$exists': False} }))
 
@@ -437,7 +421,7 @@ def countandpopulatejob(db):
         db.hexcounts.update_one({'_id': hexid}, {'$set': json.loads(result)}, upsert=False)
 
 
-def hexcountsresults_to_df(db, save=False):
+def hexcountsresults_to_df_DEPRECATED(db, save=False):
 
     """ Converts hexcounts collection containing resuts to a dataframe"""
 
@@ -461,6 +445,93 @@ def hexcountsresults_to_df(db, save=False):
         df.to_pickle("./hexcountsdf.pkl")
 
     return df
+
+
+from pandas.io.json import json_normalize
+
+def hexcountsresults_to_df(db, save=False):
+
+    """ Converts hexcounts collection containing resuts to a dataframe"""
+
+    cursor=db.hexcounts.find()
+    #.limit(10)
+
+    prueba=pd.DataFrame(list(cursor) )
+
+    df1=pd.DataFrame(pd.concat([prueba[['_id']],json_normalize(prueba["nonresidents"])],axis=1 ).set_index('_id').stack()).reset_index().rename(columns={0:'nonresidents'})
+    df2=pd.DataFrame(pd.concat([prueba[['_id']],json_normalize(prueba["nonresidentsandnonneighbors"])],axis=1 ).set_index('_id').stack()).reset_index().rename(columns={0:'nonresidentsandnonneighbors'})
+    df3=pd.DataFrame(pd.concat([prueba[['_id']],json_normalize(prueba["residents"])],axis=1 ).set_index('_id').stack()).reset_index().rename(columns={0:'residents'})
+    df4=pd.DataFrame(pd.concat([prueba[['_id']],json_normalize(prueba["totalcounts"])],axis=1 ).set_index('_id').stack()).reset_index().rename(columns={0:'totalcounts'})
+
+
+    df1=df1.merge(df2,on=['_id','level_1'],how='outer')
+    df1=df1.merge(df3,on=['_id','level_1'],how='outer')
+    df1=df1.merge(df4,on=['_id','level_1'],how='outer')
+
+    df1['time']=pd.to_datetime(pd.to_numeric(df1['level_1'], errors='coerce') // 1000, unit='s' )
+    df1.drop(columns='level_1')
+
+    if save:
+        df1.to_pickle("./hexcountsdf.pkl")
+
+    return df1
+
+
+def percent_change_two_periods_df(df, datebeforeandafterperiod=datetime.datetime(2013,6,30)):
+
+    """Creates a geodataframe with rate of change in hex counts between two periods determined by a chosen date
+    :param df: Hexcounts dataframe, which is a panel database at hex and time (quaterly)
+    :param datebeforeandafterperiod:
+    :return: geodataframe
+    """
+
+    """_ch stands for rate changes
+       dataframe also returns baseline period level data denoted p0
+       this is to check that there are enough data in baseline period"""
+
+    #Devuelve: Las variables que me interesan son nonresidents_ch	nonresidentsandnonneighbors_ch	residents_ch	totalcounts_ch
+    #que son los cambios porcentuales en tweeter usage.
+
+    df['period']=np.where(df.time>datebeforeandafterperiod,1,0)
+
+    #Tomar el promedio por periodo de hexcount
+    df2=df.groupby(['_id','period']).mean()
+    #df2
+
+    # Diferencias entre periodos para cada una de las variables
+    df2dif=df2.groupby('_id')['nonresidents', 'nonresidentsandnonneighbors', 'residents', 'totalcounts'].diff(1)
+
+    # Me voy a quedar por un lado con las diferencias en df2dif, y por otro lado con el periodo 0 en df20
+    df2dif=df2dif.reset_index()
+    df2dif=df2dif.loc[df2dif.period==1]
+    #df2dif
+
+    df2b=df2.reset_index()
+    df20=df2b.loc[df2b.period==0]
+
+    # Junto todo en un merge
+    dfnew=df2dif.merge(df20, left_on='_id', right_on='_id', suffixes=('_dif', '_p0'))
+    dfnew=dfnew.drop(columns=['period_dif', 'period_p0'])
+    #dfnew
+
+    # computo las tasas de crecimiento en las variables _ch
+    for var in ['nonresidents', 'nonresidentsandnonneighbors','residents','totalcounts']:
+        dfnew[var+'_ch']=dfnew[var+'_dif']/dfnew[var+'_p0']
+
+
+    # Las versiones b de las tasas de crecimiento son solo las tasas para aquellos lugares que tenian mas de 50 tweets en periodo 0
+    for var in ['nonresidents', 'nonresidentsandnonneighbors','residents','totalcounts']:
+        dfnew[var+'_ch'+'b']=np.where(dfnew[var+'_p0']>50,dfnew[var+'_ch'],np.NaN)
+
+    #Transformo a gdf usando la funcion que construi especialmente
+    gdfchanges=myh3.df_with_hexid_to_gdf(dfnew)
+
+    return gdfchanges
+
+
+
+
+
 
 
 if __name__ == "__main__":
