@@ -187,7 +187,11 @@ def timebasedaggregation(df3, name, frequency='Q'):
 
     :return Json """
 
-    df3['timestamp'] = pd.to_datetime(df3['created_at'] // 1000, unit='s')
+    if  df3['created_at'].dtype == '<M8[ns]': # if data is already timestamped then just copy
+        df3['timestamp'] =df3['created_at']
+    else:
+        df3['timestamp'] = pd.to_datetime(df3['created_at'] // 1000, unit='s')
+
     df3['date'] = df3['timestamp'].dt.date
     df3['hour'] = df3['timestamp'].dt.hour
     df3.index = df3['timestamp']
@@ -451,7 +455,8 @@ def hexcountsresults_to_df_DEPRECATED(db, save=False):
     for doc in cursor:
         dfi=pd.DataFrame(doc).reset_index().rename(columns={"index": "time"})
 
-        dfi['time']=pd.to_datetime(pd.to_numeric(dfi['time'], errors='coerce') // 1000, unit='s' )
+        if  dfi['time'].dtype != '<M8[ns]': # if data is already timestamped then just copy
+            dfi['time']=pd.to_datetime(pd.to_numeric(dfi['time'], errors='coerce') // 1000, unit='s' )
 
         listofdfis.append(dfi)
 
@@ -486,7 +491,12 @@ def hexcountsresults_to_df(db, save=False):
     df1=df1.merge(df3,on=['_id','level_1'],how='outer')
     df1=df1.merge(df4,on=['_id','level_1'],how='outer')
 
-    df1['time']=pd.to_datetime(pd.to_numeric(df1['level_1'], errors='coerce') // 1000, unit='s' )
+
+    if  df1['level_1'].dtype == '<M8[ns]': # if data is already timestamped then just copy
+        df1['time'] =df1['level_1']
+    else:
+        df1['time']=pd.to_datetime(pd.to_numeric(df1['level_1'], errors='coerce') // 1000, unit='s' )
+
     df1.drop(columns='level_1')
 
     if save:
