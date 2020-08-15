@@ -7,7 +7,7 @@ from shapely.geometry import Point
 def hex_to_polygon(hexid):
     """Transforms single hexid to shapely hexagonal polygon
     """
-    list_of_coords_list=h3.h3_to_geo_boundary(h3_address=hexid,geo_json=False)
+    list_of_coords_list=h3.h3_to_geo_boundary(hexid,geo_json=False)
     return Polygon([tuple(i) for i in list_of_coords_list])
 
 
