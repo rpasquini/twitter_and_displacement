@@ -64,14 +64,14 @@ def kring_smoothing(df, hex_col, metric_col, k):
     return dfs
 
 
-def kring_smoother(hexgdf, metric_col='totalpobl', hexcolname='hexid'):
+def kring_smoother(hexgdf, metric_col='totalpobl', hexcolname='hexid', k=2):
 
     """ Applies a Kring smoother to hex dataframe, returns a gdf ready to plot
     :param hexgdf: name of hex level geodataframe
     :param metric_col: column to be smooth
     :return: Hex gdf with smoothed column
     """""
-    smooth_df=kring_smoothing(hexgdf, hexcolname, metric_col=metric_col, k=2)
+    smooth_df=kring_smoothing(hexgdf, hexcolname, metric_col=metric_col, k=k)
     smooth_df2=pd.read_json(smooth_df.to_json(orient='records'), orient='records') #wrap> reconstructing the dataframe to avoid unkown bug with kring_smoothing
     hexsmoothgdf=df_with_hexid_to_gdf(smooth_df2, hexcolname=hexcolname)
 
