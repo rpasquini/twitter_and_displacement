@@ -36,7 +36,7 @@ def df_to_gdf(input_df, crs=4326, lon='lon', lat='lat'):
     geometry = [Point(xy) for xy in zip(df[lon], df[lat])]
     gdf = gpd.GeoDataFrame(df, crs=crs, geometry=geometry)
     # reproject
-    gdf.crs = {'init': 'epsg:4326'}
+    gdf.crs = 'EPSG:4326'
     # gdf=gdf.loc[(gdf['lon']>-59) & (gdf['lon']<-58) & (gdf['lat']>-35) & (gdf['lat']<-34)]
     # gdf=gdf.to_crs(crs_ciudad)
     return gdf

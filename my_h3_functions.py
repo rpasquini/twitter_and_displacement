@@ -31,7 +31,7 @@ def df_with_hexid_to_gdf(df, hexcolname='_id'):
     df_geometry=hexlist_to_geodataframe(df[hexcolname].to_list())
     #Creando el geodataframe
     gdf=gpd.GeoDataFrame(df, geometry=df_geometry['geometry'])
-    gdf.crs = {'init': 'epsg:4326', 'no_defs': True}
+    gdf.crs = 'EPSG:4326'
     return gdf
 
 

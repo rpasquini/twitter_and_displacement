@@ -901,7 +901,7 @@ def hexcountsresults_to_df_DEPRECATED(db, save=False):
     return df
 
 
-from pandas.io.json import json_normalize
+#from pandas.io.json import json_normalize
 
 def hexcountsresults_to_df(db, save=False):
 
@@ -912,10 +912,10 @@ def hexcountsresults_to_df(db, save=False):
 
     prueba=pd.DataFrame(list(cursor) )
 
-    df1=pd.DataFrame(pd.concat([prueba[['_id']],json_normalize(prueba["nonresidents"])],axis=1 ).set_index('_id').stack()).reset_index().rename(columns={0:'nonresidents'})
-    df2=pd.DataFrame(pd.concat([prueba[['_id']],json_normalize(prueba["nonresidentsandnonneighbors"])],axis=1 ).set_index('_id').stack()).reset_index().rename(columns={0:'nonresidentsandnonneighbors'})
-    df3=pd.DataFrame(pd.concat([prueba[['_id']],json_normalize(prueba["residents"])],axis=1 ).set_index('_id').stack()).reset_index().rename(columns={0:'residents'})
-    df4=pd.DataFrame(pd.concat([prueba[['_id']],json_normalize(prueba["totalcounts"])],axis=1 ).set_index('_id').stack()).reset_index().rename(columns={0:'totalcounts'})
+    df1=pd.DataFrame(pd.concat([prueba[['_id']],pd.json_normalize(prueba["nonresidents"])],axis=1 ).set_index('_id').stack()).reset_index().rename(columns={0:'nonresidents'})
+    df2=pd.DataFrame(pd.concat([prueba[['_id']],pd.json_normalize(prueba["nonresidentsandnonneighbors"])],axis=1 ).set_index('_id').stack()).reset_index().rename(columns={0:'nonresidentsandnonneighbors'})
+    df3=pd.DataFrame(pd.concat([prueba[['_id']],pd.json_normalize(prueba["residents"])],axis=1 ).set_index('_id').stack()).reset_index().rename(columns={0:'residents'})
+    df4=pd.DataFrame(pd.concat([prueba[['_id']],pd.json_normalize(prueba["totalcounts"])],axis=1 ).set_index('_id').stack()).reset_index().rename(columns={0:'totalcounts'})
 
 
     df1=df1.merge(df2,on=['_id','level_1'],how='outer')
