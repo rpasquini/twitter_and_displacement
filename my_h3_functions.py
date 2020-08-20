@@ -7,7 +7,7 @@ from shapely.geometry import Point
 def hex_to_polygon(hexid):
     """Transforms single hexid to shapely hexagonal polygon
     """
-    list_of_coords_list=h3.h3_to_geo_boundary(hexid,geo_json=False)
+    list_of_coords_list=h3.h3_to_geo_boundary(hexid,geo_json=True)
     return Polygon([tuple(i) for i in list_of_coords_list])
 
 
@@ -42,11 +42,9 @@ def df_with_hexid_to_centroids_gdf(df, hexcolname='hexid'):
     :returns gdf
     """
     seriesofcoordinates=df[hexcolname].apply(h3.h3_to_geo)
-    geometria=seriesofcoordinates.apply(lambda row: Point(row[0],row[1]))
+    geometria=seriesofcoordinates.apply(lambda row: Point(row[1],row[0]))  ## Patty reversed indices
     gdf=gpd.GeoDataFrame(df, geometry=geometria)
     return gdf
-
-
 
 
 def kring_smoothing(df, hex_col, metric_col, k):
@@ -62,6 +60,7 @@ def kring_smoothing(df, hex_col, metric_col, k):
     dfs['lat'] = dfs[hex_col].apply(lambda x: h3.h3_to_geo(x)[0])
     dfs['lng'] = dfs[hex_col].apply(lambda x: h3.h3_to_geo(x)[1])
     return dfs
+
 
 
 def kring_smoother(hexgdf, metric_col='totalpobl', hexcolname='hexid'):
