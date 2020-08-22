@@ -505,7 +505,7 @@ def hexcountsresults_to_df(db, save=False):
     return df1
 
 
-def percent_change_two_periods_df(df, datebeforeandafterperiod=datetime.datetime(2013,6,30)):
+def percent_change_two_periods_df(df, datebeforeandafterperiod=datetime.datetime(2013,6,30), period_statistic="mean"):
 
     """Creates a geodataframe with rate of change in hex counts between two periods determined by a chosen date
     :param df: Hexcounts dataframe, which is a panel database at hex and time (quaterly)
@@ -522,9 +522,13 @@ def percent_change_two_periods_df(df, datebeforeandafterperiod=datetime.datetime
 
     df['period']=np.where(df.time>datebeforeandafterperiod,1,0)
 
-    #Tomar el promedio por periodo de hexcount
-    df2=df.groupby(['_id','period']).mean()
-    #df2
+    if period_statistic=="sum":
+        #Tomar el promedio por periodo de hexcount
+        df2=df.groupby(['_id','period']).sum()
+        #df2
+    else:
+        df2=df.groupby(['_id','period']).mean()
+
 
     # Diferencias entre periodos para cada una de las variables
     df2dif=df2.groupby('_id')['nonresidents', 'nonresidentsandnonneighbors', 'residents', 'totalcounts'].diff(1)
