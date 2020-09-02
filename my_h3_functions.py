@@ -50,7 +50,7 @@ def df_with_hexid_to_centroids_gdf(df, hexcolname='hexid'):
     :returns gdf
     """
     seriesofcoordinates=df[hexcolname].apply(h3.h3_to_geo)
-    geometria=seriesofcoordinates.apply(lambda row: Point(row[0],row[1]))
+    geometria=seriesofcoordinates.apply(lambda row: Point(row[1],row[0]))
     gdf=gpd.GeoDataFrame(df, geometry=geometria)
     return gdf
 
