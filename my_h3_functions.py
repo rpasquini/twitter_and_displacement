@@ -3,12 +3,18 @@ import geopandas as gpd
 from shapely.geometry import Polygon
 from h3 import h3
 from shapely.geometry import Point
+from pandas.io.json import json_normalize
 
 def hex_to_polygon(hexid):
     """Transforms single hexid to shapely hexagonal polygon
+
     """
     list_of_coords_list=h3.h3_to_geo_boundary(h3_address=hexid,geo_json=False)
-    return Polygon([tuple(i) for i in list_of_coords_list])
+
+    #return Polygon([tuple(i) for i in list_of_coords_list])
+
+    # Corrijo que las coordenadas que necesita geopandas tienen que estar invertidas con logitud primero y latitud despues
+    return Polygon([tuple([pair[1],pair[0]]) for pair in list_of_coords_list])
 
 
 
@@ -21,6 +27,8 @@ def hexlist_to_geodataframe(list_hexagons):
 
     gdf = gpd.GeoDataFrame(df, geometry=df.apply(f, axis=1))
     return gdf
+
+
 
 def df_with_hexid_to_gdf(df, hexcolname='_id'):
 
@@ -76,3 +84,43 @@ def kring_smoother(hexgdf, metric_col='totalpobl', hexcolname='hexid', k=2):
     hexsmoothgdf=df_with_hexid_to_gdf(smooth_df2, hexcolname=hexcolname)
 
     return hexsmoothgdf
+
+
+
+def fill_gdf_with_hexs(gdf, hexresolution=9, dissolve=True):
+
+    """ Fills geodataframe with hexes. First dissolves it
+
+    Return: list of hexids
+    Dissolve: Dissolves the gdf into a single polygon. Default is True
+
+    """
+
+    #The polyfill will not work if the geometry is not in the basic projection
+
+    gdf=gdf.to_crs({'init' :'epsg:4326'})
+
+    if dissolve==True:
+        gdf['one']=1
+        gdf_dissolved=gdf.dissolve(by='one')
+
+    if gdf_dissolved.shape[0]>1:   # si una vez disuelto queda mas de un poligono entonces solo toma el primero (ojo para mejorar)
+        print("Warning, the dissolved polygon has more than one polygon. Only one was filled")
+
+        geojson=gpd.GeoSeries(gdf_dissolved.geometry[1][0]).__geo_interface__
+
+    else:
+        geojson=gpd.GeoSeries(gdf_dissolved.geometry[1]).__geo_interface__
+
+
+    geojson=pd.DataFrame(json_normalize(geojson))['features'][0][0]['geometry']
+
+    set_hexagons = h3.polyfill(geo_json = geojson, res = hexresolution, geo_json_conformant = True)
+
+    list_hexagons = list(set_hexagons)
+
+    print("the subzone was filled with ", len(list_hexagons), "hexagons at resolution 9")
+
+
+    return list_hexagons
+
