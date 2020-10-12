@@ -4,8 +4,8 @@ from pymongo import MongoClient
 import numpy as np
 import home_location as home
 
-def connecttoLocaldb(database='sydney'):
-    client = MongoClient('3.14.72.122:27017', 27017)
+def connecttoLocaldb(database='twitter'):
+    client = MongoClient('localhost', 27017)
     db = client[database]
     return db
 
