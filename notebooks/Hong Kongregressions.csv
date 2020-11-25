@@ -1,0 +1,22 @@
+,0,1,2
+0,Intercept,5.2796***,5.8933***
+1,,(0.0302),(0.0)
+2,Exclusive Static, , 
+3,, , 
+4,"Low Income, At Risk of Change",0.9618***,0.9646***
+5,,(0.0003),(0.0)
+6,"Low Income, Undergoing Change",0.3125***,0.3092***
+7,,(0.0003),(0.0)
+8,T,-0.0006***,-0.0012***
+9,,(0.0),(0.0)
+10,T * Exclusive Static, , 
+11,, , 
+12,"T * Low Income, At Risk of Change",-0.0002***,-0.0002***
+13,,(0.0),(0.0)
+14,"T * Low Income, Undergoing Change",-0.0004***,-0.0004***
+15,,(0.0),(0.0)
+16,Time aggregation Dummies,Yes,No
+17,Number of obs.,4828.0,4828.0
+18,Adj-R2,0.124,0.088
+19,F-statistic:,130.215,3.2225691975526236e+25
+20,Prob (F-statistic),0.0,0.0
