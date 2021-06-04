@@ -134,6 +134,7 @@ def populate_users_collection(db):
     db.tweets.aggregate( [ { '$group' : { '_id' : "$u_id" } } ,
                              { "$project": { "_id": 0, "u_id": "$_id"}},
                              { '$out' : "users" }] )
+    db.users.create_index([("u_id", pymongo.ASCENDING)])
 
 
 def populate_hexcounts_collection(db):

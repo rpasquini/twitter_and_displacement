@@ -6,6 +6,9 @@ import geopandas as gpd
 from shapely.geometry import Point, Polygon, shape
 import matplotlib.pyplot as plt
 import numpy as np
+from pymongo import InsertOne, UpdateOne
+import time
+from pymongo.errors import BulkWriteError
 
 import os,sys,inspect
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
@@ -334,7 +337,8 @@ def correct_encoding(dictionary):
 
     return new
 
-def findhomeandpopulate(uid, db, method='latlon'):
+def findhomeandpopulate(uid, db, method='latlon', populate=True):
+
     "Find home for user id and populate users with result function"
 
     if method == 'hex9':
@@ -342,6 +346,7 @@ def findhomeandpopulate(uid, db, method='latlon'):
     else:
         result = findhome(db=db, uid=uid, map=False)
 
+    #print(result.completed)
     if result.completed is not False:
         homedata = result.homecoordinates.to_dict()
 
@@ -351,38 +356,92 @@ def findhomeandpopulate(uid, db, method='latlon'):
             homedata2 = homedata.copy()
             del homedata2['latr']
             del homedata2['lonr']
-            dicttopopulate = {'home': {'home_stats': homedata2, 'location': {'type': "Point",
-                                                                             'coordinates': [homedata['lonr'],
-                                                                                             homedata['latr']]}}}
-            updatehomelocation(db=db, uid=uid, homedata=dicttopopulate)
+            dicttopopulate = {'foundhome':True, 'home': {'home_stats': homedata2, 'location': {'type': "Point",
+                                                        'coordinates': [homedata['lonr'], homedata['latr']]}}}
+            if populate:
+                updatehomelocation(db=db, uid=uid, homedata=dicttopopulate)
+            else:
+                return dicttopopulate
             # print(dicttopopulate)
 
         if method == 'hex9':
             homedata = correct_encoding(homedata)
-            dicttopopulate = {'hex9': homedata}
-            updatehomelocation(db=db, uid=uid, homedata=dicttopopulate)
-            # print(dicttopopulate)
+            dicttopopulate = {'hex9': homedata, 'foundhome':True}
+            #print(dicttopopulate)
+            if populate:
+                updatehomelocation(db=db, uid=uid, homedata=dicttopopulate)
+            else:
+                return dicttopopulate
+
+
+
+
+    else: #result.completed is False
+        dicttopopulate={'foundhome':result.completed, 'foundhomereason':result.reason}
+        if populate:
+            home.updatehomelocation(db=db, uid=uid, homedata=dicttopopulate)
+        else:
+            return dicttopopulate
+
+
+
 
 
 
 def job_findhomeandpopulate_hex9(db):
 
+    """
+    Iteration over all users that do not have foundhome field
+    (foundhome field takes true or false, but if doesnt exist its because it hasnt been processed)
+
+    Find home and populate hex9
+    nusers: number of users in the bulk write process
+
+    """
+
+    nusers=50
+
+    lasttime=time.time()
+
     import warnings
     warnings.simplefilter(action='ignore', category=FutureWarning)
 
-    """Iteration over all users that do not have hex9
-    Find home and populate hex9"""
-    print('Pending users to process...', db.users.count_documents({'hex9': { '$exists': False } }))
 
-    cursorpendientes=db.users.find( { 'hex9': { '$exists': False } } )
-    j=1
-    for doc in cursorpendientes:
-        uid=doc['u_id']
-        findhomeandpopulate(uid=uid, db=db, method='hex9')
 
-        if (j/50).is_integer(): #printing each 10 documents
-            print('iter:',j)
-        j=j+1
+    number_of_pending_users_to_process=db.users.count_documents({'foundhome': { '$exists': False } })
+
+    while number_of_pending_users_to_process>0:
+
+        print('Pending users to process...', number_of_pending_users_to_process)
+
+        # note limit used for efficiency
+        cursorpendientes=db.users.find( { 'foundhome': { '$exists': False } } ).limit(nusers)
+
+        #j=1
+        requests=[]
+        for doc in cursorpendientes:
+            uid=doc['u_id']
+            dicttopopulate=findhomeandpopulate(uid=uid, db=db, method='hex9', populate=False)
+            requests.append(UpdateOne({'u_id': uid}, {'$set': dicttopopulate}))
+
+            #if (j/20).is_integer(): #printing each 10 documents
+            #    print('iter:',j)
+            #j=j+1
+
+
+        try:
+            db.users.bulk_write(requests, ordered=False)
+            print('bulk write ok')
+            print('total time per user', (time.time()-lasttime)/nusers)
+            lasttime=time.time()
+
+
+        except BulkWriteError as bwe:
+            print(bwe.details)
+
+
+
+        number_of_pending_users_to_process=db.users.count_documents({'foundhome': { '$exists': False } })
 
 
 

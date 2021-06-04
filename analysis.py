@@ -404,7 +404,7 @@ def countsby_residents_and_non_residents(db, hexid, contiguity=1, resolution='9'
             result = {**totalcountsdict, **residentsdict, **nonresidentsdict, **nonresidentsandnonneighborsdict}
 
 
-    else:  # returns an empy dict
+    else:  # returns an empty dict
         result = {'totalcounts': {},
                   'residents': {},
                   'nonresidents': {},
@@ -415,7 +415,7 @@ def countsby_residents_and_non_residents(db, hexid, contiguity=1, resolution='9'
 
 
 
-def countandpopulatejob(db):
+def countandpopulatejobDEPRECATED(db):
 
     """
     Simple job to implement countsby_residents_and_non_residents
@@ -442,6 +442,42 @@ def countandpopulatejob(db):
         result = countsby_residents_and_non_residents(db, hexid, contiguity=1, resolution='9', freq='Q')
         db.hexcounts.update_one({'_id': hexid}, {'$set': json.loads(result)}, upsert=False)
 
+
+def countandpopulatejob(db):
+
+    """
+    Simple job to implement countsby_residents_and_non_residents
+    and populate into hexcounts collection
+
+    """
+    numberof_hexcounts_without_totalcounts=db.hexcounts.count_documents({'totalcounts': { '$exists': False} })
+    print('Hexagons pending to analyze..', numberof_hexcounts_without_totalcounts)
+
+    while numberof_hexcounts_without_totalcounts>0:
+
+        cursorx = db.hexcounts.find({'totalcounts': {'$exists': False}},batch_size=10, limit=5)
+
+        continuar = 1
+        j=1
+        while continuar == 1:
+            try:
+                hexid = next(cursorx)['_id']
+                print(hexid)
+                if (j/50).is_integer(): #printing each 50 hexs
+                    print('iter:',j)
+                j=j+1
+
+            except StopIteration:
+                print('fin')
+                break
+
+            result = countsby_residents_and_non_residents(db, hexid, contiguity=1, resolution='9', freq='Q')
+            #print(result)
+            db.hexcounts.update_one({'_id': hexid}, {'$set': json.loads(result)}, upsert=False)
+
+
+        numberof_hexcounts_without_totalcounts=db.hexcounts.count_documents({'totalcounts': { '$exists': False} })
+        print('Hexagons pending to analyze..', numberof_hexcounts_without_totalcounts)
 
 def hexcountsresults_to_df_DEPRECATED(db, save=False):
 
